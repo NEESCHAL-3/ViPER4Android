@@ -15,11 +15,11 @@ val localProps =
     }
 
 android {
-    namespace = "com.llsl.viper4android"
+    namespace = "com.nees.audio"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.llsl.viper4android"
+        applicationId = "com.nees.audio"
         minSdk = 28
         targetSdk = 36
         versionCode = 1
@@ -81,6 +81,7 @@ dependencies {
     implementation(composeBom)
 
     implementation(libs.compose.ui)
+    implementation("androidx.compose.foundation:foundation")
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons)

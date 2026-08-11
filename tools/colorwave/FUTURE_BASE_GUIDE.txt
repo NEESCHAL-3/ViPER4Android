@@ -1,0 +1,263 @@
+NEES COLORWAVE — FUTURE BASE PORT GUIDE
+========================================
+
+PURPOSE
+-------
+This kit turns the current known-good ColorWave implementation into a reusable
+future-base workflow.
+
+The script handles:
+  • ColorWave privileged system app
+  • 32-bit + 64-bit AIDL DSP libraries
+  • audio_effects AIDL registration
+  • ROM init SHM bootstrap
+  • permanent vendor SELinux rules for the MTK audio HAL
+  • disabling the old Nees audio KernelSU module if it is still present
+  • post-reboot verification
+  • optional /data/app -> baked system-app migration with data preservation
+
+The script DOES NOT touch Settings.apk or the ColorOS Settings entry.
+Do your Settings integration manually exactly as you requested.
+
+It also does NOT change:
+  • FS19xx SmartPA calibration/gain/thermal files
+  • Dolby Vision/video components
+  • unrelated Oplus/MTK audio effects
+  • global SELinux enforcing/permissive state
+
+
+============================================================
+A. ONE-TIME: CAPTURE YOUR CURRENT WORKING COLORWAVE
+============================================================
+
+Do this NOW while the current ROM is fully working.
+
+Put the script in ~/Downloads, then:
+
+  cd "$HOME/Downloads"
+  chmod +x Nees-ColorWave-FutureBase-PortKit.sh
+  bash Nees-ColorWave-FutureBase-PortKit.sh capture
+
+Expected:
+
+  COLORWAVE_PORTKIT_CAPTURE=PASS
+  FUTURE_BASE_READY=YES
+  SETTINGS_UNTOUCHED=YES
+
+The laptop kit is created here:
+
+  ~/Downloads/Nees-ColorWave-PortKit/
+
+Important files inside it:
+
+  app/ColorWave.apk
+  native/lib/soundfx/libv4a_aidl.so
+  native/lib64/soundfx/libv4a_aidl.so
+  init/init.colorwave.rc
+  init/colorwave-shm-bootstrap.sh
+  meta/core.sha256
+
+The "reference" directory contains snapshots only for troubleshooting.
+Those full old XML/policy files are NOT copied onto future ROMs.
+
+
+============================================================
+B. AFTER YOU FLASH A DIFFERENT BASE ROM
+============================================================
+
+Boot the new base normally first.
+Have ADB + root (su -M) working.
+
+DO NOT manually install the ColorWave APK.
+
+Run:
+
+  cd "$HOME/Downloads"
+  bash Nees-ColorWave-FutureBase-PortKit.sh bake
+
+What bake does:
+  1. Verifies the captured kit hashes.
+  2. Reads the NEW base's own audio XML and SELinux version.
+  3. Patches the NEW base files instead of replacing them with old-base files.
+  4. Adds only the ColorWave AIDL registration:
+       library: v4a_aidl -> libv4a_aidl.so
+       UUID:    90380da3-8536-4744-a6a3-5731970e640f
+       TYPE:    7261676f-6d75-7369-6364-28e2fd3ac39e
+  5. Removes stale v4a_re/v4a_standard_re entries only.
+  6. Adds the four MTK/hal_audio SHM rules using the NEW base's
+     versioned shell_data_file type.
+  7. Runs a secilc full-policy preflight when available.
+  8. Backs up every target file under:
+       /data/adb/Nees/colorwave-portkit/<timestamp>
+  9. Bakes the ColorWave APK, native libs, init bootstrap, XML and policy.
+ 10. Leaves Settings.apk completely alone.
+
+Target result:
+
+  COLORWAVE_FUTURE_BASE_BAKE=PASS
+  SETTINGS_UNTOUCHED=YES
+  MANUAL_REBOOT_REQUIRED=YES
+
+If BAKE says FAIL:
+  • do not keep blindly patching
+  • do not make SELinux permissive
+  • keep the printed backup path and inspect the failure
+
+
+============================================================
+C. REBOOT + VERIFY
+============================================================
+
+After a successful bake, reboot the phone manually once.
+
+Then:
+
+  cd "$HOME/Downloads"
+  bash Nees-ColorWave-FutureBase-PortKit.sh verify
+
+Normal clean-flash target:
+
+  ACTIVE_PATH=package:/system_ext/priv-app/ColorWave/ColorWave.apk
+  UPDATED_SYSTEM_APP=NO
+  SYSTEM_COLORWAVE_RC=YES
+  SYSTEM_BOOTSTRAP_HELPER=YES
+  ROM_BOOTSTRAP_MARKER=YES
+  SHM_SIZES=256,4096,4096
+  STALE_LEGACY_CONFIGS=0
+  AUDIOFLINGER_COLORWAVE_UUID=YES
+  APP_SHM_MAP_COUNT=3
+  SELINUX=Enforcing
+  OLD_AUDIO_MODULE_ACTIVE=NO
+  COLORWAVE_RELEVANT_AVC=NO
+
+  COLORWAVE_FUTURE_BASE_VERIFY=PASS
+  COLORWAVE_ROM_NATIVE=YES
+  KERNELSU_AUDIO_MODULE_REQUIRED=NO
+
+For a completely clean flash, Android creates the ColorWave app-data directories
+itself with the correct privapp_data_file labels. There is no manual data
+recreate step.
+
+
+============================================================
+D. IF VERIFY SAYS UPDATED_SYSTEM_APP=YES
+============================================================
+
+This happens only when /data still contains an APK update from development or
+an older dirty-flash setup.
+
+Do NOT clear ColorWave data.
+
+Run:
+
+  bash Nees-ColorWave-FutureBase-PortKit.sh adopt-system
+
+This:
+  • backs up CE + DE ColorWave data
+  • removes only the /data/app system-update copy
+  • falls back to the baked /system_ext ColorWave APK
+  • restores the ColorWave data
+  • restores SELinux labels
+  • starts ColorWave again
+
+Then run:
+
+  bash Nees-ColorWave-FutureBase-PortKit.sh verify
+
+You want UPDATED_SYSTEM_APP=NO and final VERIFY=PASS.
+
+
+============================================================
+E. SETTINGS INTEGRATION
+============================================================
+
+NOT AUTOMATED.
+
+After ColorWave itself passes verification, do your ColorOS Settings patch
+manually.
+
+This script never copies, patches, replaces, backs up, or remounts Settings.apk
+for ColorWave integration.
+
+
+============================================================
+F. WHAT SHOULD NEVER BE COPIED BETWEEN BASES
+============================================================
+
+Do NOT copy the entire old:
+  • vendor_sepolicy.cil
+  • audio_effects.xml
+  • audio_effects_config.xml
+  • Settings.apk
+  • vendor audio_param directories
+  • smartpa_param_fs calibration
+  • FS19xx firmware/calibration
+  • complete vendor partition
+
+The port script intentionally patches the target base's own XML/policy instead.
+
+
+============================================================
+G. WHEN YOU UPDATE COLORWAVE ITSELF
+============================================================
+
+If you later build a newer ColorWave APK/native DSP and confirm it works:
+
+  1. Bake/test it on the current phone.
+  2. Run capture again.
+  3. The kit is refreshed with that exact known-good implementation.
+  4. Future bases use the new captured kit.
+
+The capture hashes prevent accidental mixing of old/new pieces.
+
+
+============================================================
+H. CURRENT COLORWAVE CORE ARCHITECTURE
+============================================================
+
+ColorWave privileged controller
+        |
+        v
+AIDL / V4MS shared-memory control
+        |
+        v
+libv4a_aidl.so
+        |
+        v
+MTK Audio HAL / AudioFlinger
+        |
+        v
+stock Rodin FS19xx SmartPA calibration
+
+SHM:
+  /data/local/tmp/v4a/shm_status.bin   256 bytes
+  /data/local/tmp/v4a/shm_params.bin  4096 bytes
+  /data/local/tmp/v4a/shm_bulk.bin    4096 bytes
+
+Effect implementation UUID:
+  90380da3-8536-4744-a6a3-5731970e640f
+
+Effect type UUID:
+  7261676f-6d75-7369-6364-28e2fd3ac39e
+
+
+============================================================
+I. SIMPLE FUTURE WORKFLOW
+============================================================
+
+CURRENT WORKING ROM — once:
+  capture
+
+NEW BASE:
+  bake
+  -> manually reboot
+  verify
+
+If UPDATED_SYSTEM_APP=YES:
+  adopt-system
+  verify
+
+Then:
+  do Settings integration manually
+
+Done.

@@ -15,3 +15,9 @@ local.properties
 *.jks
 *.keystore
 /apk
+.gradle/
+**/build/
+.nees-backups/
+*.apk
+*.aab
+Nees-ColorWave-PortKit/
